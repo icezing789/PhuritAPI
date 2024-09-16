@@ -1,7 +1,11 @@
-const express = require('express')
-const mysql = require('mysql2')
-const app = express()
-const port = 3000
+const express = require('express');
+const mysql = require('mysql2');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+
+const app = express();
+const port = 3000;
 
 //Database(MySql) configulationss
 const db = mysql.createConnection(
@@ -12,21 +16,45 @@ const db = mysql.createConnection(
         database: "db_md_purit"
     }
 )
-db.connect()
 
-//Middleware (Body parser)
-app.use(express.json())
-app.use(express.urlencoded ({extended: true}))
+const uploadDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir);
+}
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const profileName = "image_";
+    const ext = path.extname(file.originalname);
+    cb(null, profileName + Date.now() + ext);
+  }
+});
+
+const upload = multer({ storage: storage });
+
+db.connect();
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use('/uploads', express.static(uploadDir));
 
 //INTO
-app.post('/api/addpd', function(req, res){
+app.post('/api/addpd',upload.single('Image') ,function(req, res){
     const {datacomName, datacomModel, datacomSerial, datacomQuantity, datacomPrice, datacomCPU, datacomRam, datacomHDD} = req.body
     if(!datacomName || !datacomModel || !datacomSerial || !datacomQuantity || !datacomPrice || !datacomCPU || !datacomRam || !datacomHDD){
         return res.status(400).send({"message":"กรุณากรอกข้อมูลให้ครบถ้วน", "status":false});
     }
 
-    const sql = "INSERT INTO datacom (datacomName, datacomModel, datacomSerial, datacomQuantity, datacomPrice, datacomCPU, datacomRam, datacomHDD) values (?,?,?,?,?,?,?,?)"
-    db.query(sql, [datacomName, datacomModel, datacomSerial, datacomQuantity, datacomPrice, datacomCPU, datacomRam, datacomHDD], function(err, result){
+    if (!req.file) {
+        return res.json({ "message": "ต้องมีภาพประกอบ", "status": false });
+    }
+
+    const ImageURL = `/uploads/${req.file.filename}`;
+
+    const sql = "INSERT INTO datacom (datacomName, datacomModel, datacomSerial, datacomQuantity, datacomPrice, datacomCPU, datacomRam, datacomHDD,datacomIMG) values (?,?,?,?,?,?,?,?,?)"
+    db.query(sql, [datacomName, datacomModel, datacomSerial, datacomQuantity, datacomPrice, datacomCPU, datacomRam, datacomHDD,ImageURL], function(err, result){
         if(err) {
             console.error('Errorvinserting data into the database;',err);
             res.status(100).send({"message":"เปิดข้อผิดพลาดในการบันทึกลงระบบ", "status":false});
